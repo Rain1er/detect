@@ -694,11 +694,10 @@ class Utils {
             // 检查缓存文件中是否存在该路径
             val cacheFile = File("/tmp/cached_paths.txt")
             if (!cacheFile.exists()) {
-                // 如果缓存文件不存在，则创建一个新的并写入当前path
+                // 如果缓存文件不存在，则创建
                 cacheFile.createNewFile()
-                cacheFile.appendText("$path\n")
-                return false
             }
+            cacheFile.appendText("$path\n")
             return cacheFile.readLines().any { it == path }
         }
 
