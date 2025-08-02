@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 import kotlinx.coroutines.*
+import java.io.File
 import java.net.URLDecoder
 import java.util.concurrent.Executors
 
@@ -66,10 +67,10 @@ class Utils {
                         }
                     }
                     // sleep 注入也并发执行
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithBackquotes_2, fuzz.sleepInjectWithBackquotes_3) }
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSemicolon_2, fuzz.sleepInjectWithSemicolon_3) }
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSinglequotes_2, fuzz.sleepInjectWithSinglequotes_3) }
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithDoublequotes_2, fuzz.sleepInjectWithDoublequotes_3) }
+                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithBackquotes_2, fuzz.sleepInjectWithBackquotes_4) }
+                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSemicolon_2, fuzz.sleepInjectWithSemicolon_4) }
+                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSinglequotes_2, fuzz.sleepInjectWithSinglequotes_4) }
+                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithDoublequotes_2, fuzz.sleepInjectWithDoublequotes_4) }
                 }
             }
         }
@@ -80,48 +81,53 @@ class Utils {
                 try {
                     val bodyString = request.bodyToString()
                     val params = parseFormData(bodyString)
-
                     params.forEach { (key, value) ->
-                        // Echo-based fuzzing
-                        fuzz.EchoInject.forEach { payload ->
-                            launch(fuzzingDispatcher) {
-                                val newValue = value + payload
-                                val escapedNewValue = Regex.escapeReplacement("$key=$newValue")
-                                val newBody = bodyString.replaceFirst(Regex("$key=[^&]*"), escapedNewValue)
-                                api.logging().logToOutput("Fuzzing form param: $key = $newValue")
+                        // 支持特殊格式的表单数据，key={JSON对象}
+                        // parameter={"License":{"consumer":"1","address":"1","zipCode":"1","contactor":"1","telphone":";sleep 5;","email":"1@qq.com","enabled":true}}
+                        if (value.startsWith("{") && value.endsWith("}")) {
+                            val prefix = "$key="
+                            fuzzJsonBody(prefix, request, api)
+                        }else {
+                            // Echo-based fuzzing
+                            fuzz.EchoInject.forEach { payload ->
+                                launch(fuzzingDispatcher) {
+                                    val newValue = value + payload
+                                    val escapedNewValue = Regex.escapeReplacement("$key=$newValue")
+                                    val newBody = bodyString.replaceFirst(Regex("$key=[^&]*"), escapedNewValue)
+                                    api.logging().logToOutput("Fuzzing form param: $key = $newValue")
 
-                                val httpRequestResponse = sendRequestAsync(api, request.withBody(newBody))
-                                if (httpRequestResponse.response().bodyToString()?.contains("uid=") == true) {
-                                    api.organizer().sendToOrganizer(httpRequestResponse)
+                                    val httpRequestResponse = sendRequestAsync(api, request.withBody(newBody))
+                                    if (httpRequestResponse.response().bodyToString()?.contains("uid=") == true) {
+                                        api.organizer().sendToOrganizer(httpRequestResponse)
+                                    }
+                                }
+                            }
+
+                            // OOB-based fuzzing
+                            fuzz.OOBInject.forEach { payload ->
+                                launch(fuzzingDispatcher) {
+                                    val collaboratorClient = api.collaborator().createClient()
+                                    val collaboratorPayload = collaboratorClient.generatePayload()
+                                    val oobPayload = payload.replaceFirst("{{interactsh-url}}", collaboratorPayload.toString())
+                                    val newValue = value + oobPayload
+                                    val escapedNewValue = Regex.escapeReplacement("$key=$newValue")
+                                    val newBody = bodyString.replaceFirst(Regex("$key=[^&]*"), escapedNewValue)
+                                    api.logging().logToOutput("Fuzzing form param with OOB: $key = $newValue")
+
+                                    val httpRequestResponse = sendRequestAsync(api, request.withBody(newBody))
+                                    delay(2000)
+                                    if (collaboratorClient.getAllInteractions().isNotEmpty()) {
+                                        api.organizer().sendToOrganizer(httpRequestResponse)
+                                    }
                                 }
                             }
                         }
-
-                        // OOB-based fuzzing
-                        fuzz.OOBInject.forEach { payload ->
-                            launch(fuzzingDispatcher) {
-                                val collaboratorClient = api.collaborator().createClient()
-                                val collaboratorPayload = collaboratorClient.generatePayload()
-                                val oobPayload = payload.replaceFirst("{{interactsh-url}}", collaboratorPayload.toString())
-                                val newValue = value + oobPayload
-                                val escapedNewValue = Regex.escapeReplacement("$key=$newValue")
-                                val newBody = bodyString.replaceFirst(Regex("$key=[^&]*"), escapedNewValue)
-                                api.logging().logToOutput("Fuzzing form param with OOB: $key = $newValue")
-
-                                val httpRequestResponse = sendRequestAsync(api, request.withBody(newBody))
-                                delay(2000)
-                                if (collaboratorClient.getAllInteractions().isNotEmpty()) {
-                                    api.organizer().sendToOrganizer(httpRequestResponse)
-                                }
-                            }
+                        // Sleep-based fuzzing
+                        launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithBackquotes_2, fuzz.sleepInjectWithBackquotes_4) }
+                        launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSemicolon_2, fuzz.sleepInjectWithSemicolon_4) }
+                        launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSinglequotes_2, fuzz.sleepInjectWithSinglequotes_4) }
+                        launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithDoublequotes_2, fuzz.sleepInjectWithDoublequotes_4) }
                         }
-                    }
-                    // Sleep-based fuzzing
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithBackquotes_2, fuzz.sleepInjectWithBackquotes_3) }
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSemicolon_2, fuzz.sleepInjectWithSemicolon_3) }
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithSinglequotes_2, fuzz.sleepInjectWithSinglequotes_3) }
-                    launch(fuzzingDispatcher) { sleepInject(request, api, fuzz.sleepInjectWithDoublequotes_2, fuzz.sleepInjectWithDoublequotes_3) }
-
                 } catch (e: Exception) {
                     api.logging().logToOutput("Error parsing form data: ${e.message}")
                 }
@@ -166,7 +172,7 @@ class Utils {
                                         val httpRequestResponse = sendRequestAsync(api, updatedRequest_)
                                         val secondTimeElapsed = System.currentTimeMillis() - secondStartTime
 
-                                        if (secondTimeElapsed in 3000..10000) {
+                                        if ( secondTimeElapsed in 4000..13000 && secondTimeElapsed-timeElapsed > 2000) {
                                             api.organizer().sendToOrganizer(httpRequestResponse)
                                         }
                                     }
@@ -179,11 +185,12 @@ class Utils {
         }
 
         // Fuzz JSON请求体
-        suspend fun fuzzJsonBody(request: InterceptedRequest, api: MontoyaApi) {
+        suspend fun fuzzJsonBody(prefix: String = "", request: InterceptedRequest, api: MontoyaApi) {
             coroutineScope {
                 try {
                     val mapper = ObjectMapper()
-                    val jsonNode = mapper.readTree(request.bodyToString())
+                    val body = URLDecoder.decode(request.bodyToString().replace("$prefix", ""), "UTF-8")
+                    val jsonNode = mapper.readTree(body)
 
                     if (jsonNode.isObject) {
                         val objectNode = jsonNode as ObjectNode
@@ -193,7 +200,7 @@ class Utils {
                         echoResults.forEach { modifiedJson ->
                             launch(fuzzingDispatcher) {
                                 val newBody = mapper.writeValueAsString(modifiedJson)
-                                val updatedRequest = request.withBody(newBody)
+                                val updatedRequest = request.withBody(prefix+newBody)
                                 val httpRequestResponse = sendRequestAsync(api, updatedRequest)
                                 if (httpRequestResponse.response().bodyToString()?.contains("uid=") == true) {
                                     api.organizer().sendToOrganizer(httpRequestResponse)
@@ -206,7 +213,7 @@ class Utils {
                         oobResults.forEach { (modifiedJson, collaboratorClient) ->
                             launch(fuzzingDispatcher) {
                                 val newBody = mapper.writeValueAsString(modifiedJson)
-                                val updatedRequest = request.withBody(newBody)
+                                val updatedRequest = request.withBody(prefix+newBody)
                                 val httpRequestResponse = sendRequestAsync(api, updatedRequest)
                                 delay(2000)
                                 if (collaboratorClient.getAllInteractions().isNotEmpty()) {
@@ -216,7 +223,10 @@ class Utils {
                         }
 
                         // Sleep-based fuzzing
-                        launch(fuzzingDispatcher) { fuzzJsonObjectWithSleep(objectNode, mapper, api, request) }
+                        launch { sleepInjectJson(prefix,objectNode, mapper, api, request, fuzz.sleepInjectWithBackquotes_2, fuzz.sleepInjectWithBackquotes_4) }
+                        launch { sleepInjectJson(prefix,objectNode, mapper, api, request, fuzz.sleepInjectWithSemicolon_2, fuzz.sleepInjectWithSemicolon_4) }
+                        launch { sleepInjectJson(prefix,objectNode, mapper, api, request, fuzz.sleepInjectWithSinglequotes_2, fuzz.sleepInjectWithSinglequotes_4) }
+                        launch { sleepInjectJson(prefix,objectNode, mapper, api, request, fuzz.sleepInjectWithDoublequotes_2, fuzz.sleepInjectWithDoublequotes_4) }
 
                     } else {
                         api.logging().logToOutput("Request body is not a valid JSON object.")
@@ -393,23 +403,10 @@ class Utils {
             return results
         }
 
-        // Sleep-based JSON fuzzing
-        suspend fun fuzzJsonObjectWithSleep(
-            objectNode: ObjectNode,
-            mapper: ObjectMapper,
-            api: MontoyaApi,
-            request: InterceptedRequest
-        ) {
-            coroutineScope {
-                launch { sleepInjectJson(objectNode, mapper, api, request, fuzz.sleepInjectWithBackquotes_2, fuzz.sleepInjectWithBackquotes_3) }
-                launch { sleepInjectJson(objectNode, mapper, api, request, fuzz.sleepInjectWithSemicolon_2, fuzz.sleepInjectWithSemicolon_3) }
-                launch { sleepInjectJson(objectNode, mapper, api, request, fuzz.sleepInjectWithSinglequotes_2, fuzz.sleepInjectWithSinglequotes_3) }
-                launch { sleepInjectJson(objectNode, mapper, api, request, fuzz.sleepInjectWithDoublequotes_2, fuzz.sleepInjectWithDoublequotes_3) }
-            }
-        }
 
         // Sleep injection for JSON
         suspend fun sleepInjectJson(
+            prefix: String = "",
             objectNode: ObjectNode,
             mapper: ObjectMapper,
             api: MontoyaApi,
@@ -431,7 +428,7 @@ class Utils {
                                     result.put(fieldName, newValue)
 
                                     val newBody = mapper.writeValueAsString(result)
-                                    val updatedRequest = request.withBody(newBody)
+                                    val updatedRequest = request.withBody(prefix + newBody)
 
                                     api.logging().logToOutput("Sleep fuzzing JSON field: $fieldName = $newValue")
 
@@ -449,7 +446,7 @@ class Utils {
                                                 secondResult.put(fieldName, secondValue)
 
                                                 val secondBody = mapper.writeValueAsString(secondResult)
-                                                val secondUpdatedRequest = request.withBody(secondBody)
+                                                val secondUpdatedRequest = request.withBody(prefix + secondBody)
 
                                                 api.logging()
                                                     .logToOutput("Sleep fuzzing JSON field (confirmation): $fieldName = $secondValue")
@@ -461,7 +458,7 @@ class Utils {
                                                 val secondTimeElapsed = secondEndTime - secondStartTime
 
                                                 // 如果两次都有延迟，则认为存在漏洞
-                                                if (secondTimeElapsed in 3000..10000) {
+                                                if ( secondTimeElapsed in 4000..13000 && secondTimeElapsed-timeElapsed > 2000) {
                                                     api.organizer().sendToOrganizer(httpRequestResponse)
                                                 }
                                             }
@@ -472,8 +469,136 @@ class Utils {
                         }
 
                         fieldValue.isObject -> {
-                            // 递归处理嵌套对象
-                            launch(fuzzingDispatcher) { sleepInjectJson(fieldValue as ObjectNode, mapper, api, request, time_2, time_3) }
+                            // 递归处理嵌套对象 - 修复：正确处理嵌套结构
+                            val nestedObjectNode = fieldValue as ObjectNode
+                            nestedObjectNode.fieldNames().asSequence().forEach { nestedFieldName ->
+                                val nestedFieldValue = nestedObjectNode.get(nestedFieldName)
+                                
+                                when {
+                                    nestedFieldValue.isTextual -> {
+                                        time_2.forEach { payload ->
+                                            launch(fuzzingDispatcher) {
+                                                val result = objectNode.deepCopy()
+                                                val nestedResult = result.get(fieldName) as ObjectNode
+                                                val originalValue = nestedFieldValue.asText()
+                                                val newValue = originalValue + payload
+                                                nestedResult.put(nestedFieldName, newValue)
+
+                                                val newBody = mapper.writeValueAsString(result)
+                                                val updatedRequest = request.withBody(prefix + newBody)
+
+                                                api.logging().logToOutput("Sleep fuzzing nested JSON field: $fieldName.$nestedFieldName = $newValue")
+
+                                                // 发送修改后的请求并统计时间
+                                                val startTime = System.currentTimeMillis()
+                                                sendRequestAsync(api, updatedRequest)
+                                                val endTime = System.currentTimeMillis()
+                                                val timeElapsed = endTime - startTime
+
+                                                if (timeElapsed in 2000..7000) {
+                                                    time_3.forEach { secondPayload ->
+                                                        launch(fuzzingDispatcher) {
+                                                            val secondResult = objectNode.deepCopy()
+                                                            val secondNestedResult = secondResult.get(fieldName) as ObjectNode
+                                                            val secondValue = originalValue + secondPayload
+                                                            secondNestedResult.put(nestedFieldName, secondValue)
+
+                                                            val secondBody = mapper.writeValueAsString(secondResult)
+                                                            val secondUpdatedRequest = request.withBody(prefix + secondBody)
+
+                                                            api.logging()
+                                                                .logToOutput("Sleep fuzzing nested JSON field (confirmation): $fieldName.$nestedFieldName = $secondValue")
+
+                                                            // 发送确认请求并统计时间
+                                                            val secondStartTime = System.currentTimeMillis()
+                                                            val httpRequestResponse = sendRequestAsync(api, secondUpdatedRequest)
+                                                            val secondEndTime = System.currentTimeMillis()
+                                                            val secondTimeElapsed = secondEndTime - secondStartTime
+
+                                                            // 如果两次都有延迟且满足一定条件，则认为存在漏洞
+                                                            if ( secondTimeElapsed in 4000..13000 && secondTimeElapsed-timeElapsed > 2000) {
+                                                                api.organizer().sendToOrganizer(httpRequestResponse)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    nestedFieldValue.isObject -> {
+                                        // 递归处理更深层嵌套对象
+                                        launch(fuzzingDispatcher) { 
+                                            sleepInjectJson(prefix, nestedFieldValue as ObjectNode, mapper, api, request, time_2, time_3) 
+                                        }
+                                    }
+                                    
+                                    nestedFieldValue.isArray -> {
+                                        // 处理嵌套对象中的数组
+                                        val nestedArrayNode = nestedFieldValue
+                                        for (i in 0 until nestedArrayNode.size()) {
+                                            val arrayElement = nestedArrayNode.get(i)
+                                            when {
+                                                arrayElement.isTextual -> {
+                                                    time_2.forEach { payload ->
+                                                        launch(fuzzingDispatcher) {
+                                                            val result = objectNode.deepCopy()
+                                                            val nestedResult = result.get(fieldName) as ObjectNode
+                                                            val resultArray = nestedResult.get(nestedFieldName) as ArrayNode
+                                                            val originalValue = arrayElement.asText()
+                                                            val newValue = originalValue + payload
+                                                            resultArray.set(i, mapper.valueToTree(newValue))
+
+                                                            val newBody = mapper.writeValueAsString(result)
+                                                            val updatedRequest = request.withBody(prefix + newBody)
+
+                                                            api.logging()
+                                                                .logToOutput("Sleep fuzzing nested JSON array field: $fieldName.$nestedFieldName[$i] = $newValue")
+
+                                                            val startTime = System.currentTimeMillis()
+                                                            sendRequestAsync(api, updatedRequest)
+                                                            val timeElapsed = System.currentTimeMillis() - startTime
+
+                                                            if (timeElapsed in 2000..7000) {
+                                                                time_3.forEach { secondPayload ->
+                                                                    launch(fuzzingDispatcher) {
+                                                                        val secondResult = objectNode.deepCopy()
+                                                                        val secondNestedResult = secondResult.get(fieldName) as ObjectNode
+                                                                        val secondArray = secondNestedResult.get(nestedFieldName) as ArrayNode
+                                                                        val secondValue = originalValue + secondPayload
+                                                                        secondArray.set(i, mapper.valueToTree(secondValue))
+
+                                                                        val secondBody = mapper.writeValueAsString(secondResult)
+                                                                        val secondUpdatedRequest = request.withBody(prefix + secondBody)
+
+                                                                        api.logging()
+                                                                            .logToOutput("Sleep fuzzing nested JSON array field (confirmation): $fieldName.$nestedFieldName[$i] = $secondValue")
+
+                                                                        val secondStartTime = System.currentTimeMillis()
+                                                                        val httpRequestResponse = sendRequestAsync(api, secondUpdatedRequest)
+                                                                        val secondTimeElapsed = System.currentTimeMillis() - secondStartTime
+
+                                                                        if ( secondTimeElapsed in 4000..13000 && secondTimeElapsed-timeElapsed > 2000) {
+                                                                            api.organizer().sendToOrganizer(httpRequestResponse)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                arrayElement.isObject -> {
+                                                    // 递归处理数组中的对象
+                                                    launch(fuzzingDispatcher) { 
+                                                        sleepInjectJson(prefix, arrayElement as ObjectNode, mapper, api, request, time_2, time_3) 
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         fieldValue.isArray -> {
@@ -492,7 +617,7 @@ class Utils {
                                                 resultArray.set(i, mapper.valueToTree(newValue))
 
                                                 val newBody = mapper.writeValueAsString(result)
-                                                val updatedRequest = request.withBody(newBody)
+                                                val updatedRequest = request.withBody(prefix + newBody)
 
                                                 api.logging()
                                                     .logToOutput("Sleep fuzzing JSON array field: $fieldName[$i] = $newValue")
@@ -510,7 +635,7 @@ class Utils {
                                                             secondArray.set(i, mapper.valueToTree(secondValue))
 
                                                             val secondBody = mapper.writeValueAsString(secondResult)
-                                                            val secondUpdatedRequest = request.withBody(secondBody)
+                                                            val secondUpdatedRequest = request.withBody(prefix + secondBody)
 
                                                             api.logging()
                                                                 .logToOutput("Sleep fuzzing JSON array field (confirmation): $fieldName[$i] = $secondValue")
@@ -519,7 +644,7 @@ class Utils {
                                                             val httpRequestResponse = sendRequestAsync(api, secondUpdatedRequest)
                                                             val secondTimeElapsed = System.currentTimeMillis() - secondStartTime
 
-                                                            if (secondTimeElapsed in 3000..10000) {
+                                                            if ( secondTimeElapsed in 4000..13000 && secondTimeElapsed-timeElapsed > 2000) {
                                                                 api.organizer().sendToOrganizer(httpRequestResponse)
                                                             }
                                                         }
@@ -531,7 +656,9 @@ class Utils {
 
                                     arrayElement.isObject -> {
                                         // 递归处理数组中的对象
-                                        launch(fuzzingDispatcher) { sleepInjectJson(arrayElement as ObjectNode, mapper, api, request, time_2, time_3) }
+                                        launch(fuzzingDispatcher) { 
+                                            sleepInjectJson(prefix, arrayElement as ObjectNode, mapper, api, request, time_2, time_3) 
+                                        }
                                     }
                                 }
                             }
@@ -561,6 +688,18 @@ class Utils {
                 return excludeExtensions.contains(extension)
             }
             return false
+        }
+
+        fun isCached(path: String): Boolean {
+            // 检查缓存文件中是否存在该路径
+            val cacheFile = File("/tmp/cached_paths.txt")
+            if (!cacheFile.exists()) {
+                // 如果缓存文件不存在，则创建一个新的并写入当前path
+                cacheFile.createNewFile()
+                cacheFile.appendText("$path\n")
+                return false
+            }
+            return cacheFile.readLines().any { it == path }
         }
 
 

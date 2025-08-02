@@ -7,6 +7,7 @@ import burp.api.montoya.proxy.http.ProxyRequestHandler
 import burp.api.montoya.proxy.http.ProxyRequestReceivedAction
 import burp.api.montoya.proxy.http.ProxyRequestToBeSentAction
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import rain.rce.Utils
 
@@ -19,14 +20,16 @@ class DetectorHttpRequestHandler(private val api: MontoyaApi) : ProxyRequestHand
     override fun handleRequestToBeSent(interceptedRequest: InterceptedRequest): ProxyRequestToBeSentAction {
 
         // 检查是否需要进行扫描
-        if (Utils.isStatic(interceptedRequest.path())) {
+        if (Utils.isStatic(interceptedRequest.path()) || Utils.isCached(interceptedRequest.path())) {
             return ProxyRequestToBeSentAction.continueWith(interceptedRequest)
         }
 
+        // 注：以下对cookie同样进行了fuzz
         // 1. 如果有查询参数，那么注意逐个fuzz
         if (interceptedRequest.hasParameters() && interceptedRequest.method() == "GET") {
             // 使用 GlobalScope.launch 启动一个后台协程，不会阻塞当前线程
             GlobalScope.launch {
+                delay(5000)
                 Utils.fuzzQueryParameters(interceptedRequest, api)
             }
         }
@@ -35,14 +38,18 @@ class DetectorHttpRequestHandler(private val api: MontoyaApi) : ProxyRequestHand
         if (interceptedRequest.body().length() > 0 && interceptedRequest.method() == "POST") {
             val contentType = interceptedRequest.contentType()
             when {
+
                 contentType == ContentType.URL_ENCODED -> {
+
                     GlobalScope.launch {
+                        delay(5000)
                         Utils.fuzzFormBody(interceptedRequest, api)
                     }
                 }
                 contentType == ContentType.JSON -> {
                     GlobalScope.launch {
-                        Utils.fuzzJsonBody(interceptedRequest, api)
+                        delay(5000)
+                        Utils.fuzzJsonBody("",interceptedRequest, api)
                     }
                 }
                 contentType == ContentType.MULTIPART -> {
