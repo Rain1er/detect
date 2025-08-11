@@ -19,8 +19,8 @@ class DetectorHttpRequestHandler(private val api: MontoyaApi) : ProxyRequestHand
 
     override fun handleRequestToBeSent(interceptedRequest: InterceptedRequest): ProxyRequestToBeSentAction {
 
-        // 检查是否需要进行扫描
-        if (Utils.isStatic(interceptedRequest.path()) || Utils.isCached(interceptedRequest.path())) {
+        // 检查是否命中缓存
+        if (Utils.isCached(interceptedRequest.path())) {
             return ProxyRequestToBeSentAction.continueWith(interceptedRequest)
         }
 

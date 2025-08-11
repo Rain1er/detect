@@ -673,7 +673,12 @@ class Utils {
         fun isStatic(path: String): Boolean {
             val extensionIndex = path.lastIndexOf(".")
             if (extensionIndex > -1) {
-                val extension = path.substring(extensionIndex + 1)
+                var extension = path.substring(extensionIndex + 1)
+                // 如果有查询参数，去掉查询参数部分
+                val queryIndex = extension.indexOf("?")
+                if (queryIndex > -1) {
+                    extension = extension.substring(0, queryIndex)
+                }
                 val excludeExtensions = setOf(
                     "3g2", "3gp", "7z", "aac", "abw", "aif", "aifc", "aiff", "apk", "arc", "au", "avi", "azw",
                     "bat", "bin", "bmp", "bz", "bz2", "cmd", "cmx", "cod", "com", "csh", "css", "csv", "dll",
@@ -691,14 +696,24 @@ class Utils {
         }
 
         fun isCached(path: String): Boolean {
+            if (isStatic(path) || path == "/") return true   // 静态资源直接跳过扫描，也不写入缓存
+
+            var cachePath = path
+            // 如果有查询参数，去掉查询参数部分赋值给cachePath
+            val queryIndex = path.indexOf("?")
+            if (queryIndex > -1) {
+                cachePath = path.substring(0, queryIndex)
+            }
+
             // 检查缓存文件中是否存在该路径
             val cacheFile = File("/tmp/cached_paths.txt")
             if (!cacheFile.exists()) {
                 // 如果缓存文件不存在，则创建
                 cacheFile.createNewFile()
             }
-            val flag = cacheFile.readLines().any { it == path }
-            cacheFile.appendText("$path\n")
+
+            val flag = cacheFile.readLines().any { it == cachePath }
+            cacheFile.appendText("$cachePath\n")
             return flag
         }
 
