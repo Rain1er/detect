@@ -688,7 +688,7 @@ class Utils {
                     "oga", "ogg", "ogv", "ogx", "otf", "pbm", "pdf", "pgm", "png", "pnm", "ppm", "ppt", "pptx",
                     "ra", "ram", "rar", "ras", "rgb", "rmi", "rtf", "scss", "sh", "snd", "svg", "swf", "tar",
                     "tif", "tiff", "ttf", "vsd", "war", "wav", "weba", "webm", "webp", "wmv", "woff", "woff2",
-                    "xbm", "xls", "xlsx", "xpm", "xul", "xwd", "zip", "js", "map", "so", "iso"
+                    "xbm", "xls", "xlsx", "xpm", "xul", "xwd", "zip", "js", "map", "so", "iso","html"
                 )
                 return excludeExtensions.contains(extension)
             }
@@ -713,7 +713,9 @@ class Utils {
             }
 
             val flag = cacheFile.readLines().any { it == cachePath }
-            cacheFile.appendText("$cachePath\n")
+            if (!flag){
+                cacheFile.appendText("$cachePath\n")
+            }
             return flag
         }
 
