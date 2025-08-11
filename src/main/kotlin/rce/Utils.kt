@@ -697,8 +697,9 @@ class Utils {
                 // 如果缓存文件不存在，则创建
                 cacheFile.createNewFile()
             }
+            val flag = cacheFile.readLines().any { it == path }
             cacheFile.appendText("$path\n")
-            return cacheFile.readLines().any { it == path }
+            return flag
         }
 
 
