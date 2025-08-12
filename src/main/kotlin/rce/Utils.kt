@@ -150,30 +150,33 @@ class Utils {
             coroutineScope {
                 val parameters = request.parameters()
                 parameters.forEach { param ->
-                    time_2.forEach { payload ->
-                        launch(fuzzingDispatcher) {
-                            val newParam = HttpParameter.parameter(param.name(), param.value() + payload, param.type())
-                            val updatedRequest = request.withUpdatedParameters(newParam)
-                            api.logging().logToOutput("POST: Fuzzing URL : " + updatedRequest.path())
+                    // 不要fuzz Cookie参数
+                    if (param.type() != HttpParameterType.COOKIE ){
+                        time_2.forEach { payload ->
+                            launch(fuzzingDispatcher) {
+                                val newParam = HttpParameter.parameter(param.name(), param.value() + payload, param.type())
+                                val updatedRequest = request.withUpdatedParameters(newParam)
+                                api.logging().logToOutput("POST: Fuzzing URL : " + updatedRequest.path())
 
-                            val startTime = System.currentTimeMillis()
-                            sendRequestAsync(api, updatedRequest)
-                            val timeElapsed = System.currentTimeMillis() - startTime
+                                val startTime = System.currentTimeMillis()
+                                sendRequestAsync(api, updatedRequest)
+                                val timeElapsed = System.currentTimeMillis() - startTime
 
-                            if (timeElapsed in 2000..7000) {
-                                // 启动第二个确认请求
-                                time_3.forEach { secondPayload ->
-                                    launch(fuzzingDispatcher) {
-                                        val newParamWithSleep = HttpParameter.parameter(param.name(), param.value() + secondPayload, param.type())
-                                        val updatedRequest_ = request.withUpdatedParameters(newParamWithSleep)
-                                        api.logging().logToOutput("POST: Fuzzing URL (Confirm) : " + updatedRequest_.path())
+                                if (timeElapsed in 2000..7000) {
+                                    // 启动第二个确认请求
+                                    time_3.forEach { secondPayload ->
+                                        launch(fuzzingDispatcher) {
+                                            val newParamWithSleep = HttpParameter.parameter(param.name(), param.value() + secondPayload, param.type())
+                                            val updatedRequest_ = request.withUpdatedParameters(newParamWithSleep)
+                                            api.logging().logToOutput("POST: Fuzzing URL (Confirm) : " + updatedRequest_.path())
 
-                                        val secondStartTime = System.currentTimeMillis()
-                                        val httpRequestResponse = sendRequestAsync(api, updatedRequest_)
-                                        val secondTimeElapsed = System.currentTimeMillis() - secondStartTime
+                                            val secondStartTime = System.currentTimeMillis()
+                                            val httpRequestResponse = sendRequestAsync(api, updatedRequest_)
+                                            val secondTimeElapsed = System.currentTimeMillis() - secondStartTime
 
-                                        if ( secondTimeElapsed in 4000..13000 && secondTimeElapsed-timeElapsed > 2000) {
-                                            api.organizer().sendToOrganizer(httpRequestResponse)
+                                            if ( secondTimeElapsed in 4000..13000 && secondTimeElapsed-timeElapsed > 2000) {
+                                                api.organizer().sendToOrganizer(httpRequestResponse)
+                                            }
                                         }
                                     }
                                 }
