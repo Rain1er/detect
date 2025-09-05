@@ -84,7 +84,7 @@ class Utils {
                     params.forEach { (key, value) ->
                         // 支持特殊格式的表单数据，key={JSON对象}
                         // parameter={"License":{"consumer":"1","address":"1","zipCode":"1","contactor":"1","telphone":";sleep 5;","email":"1@qq.com","enabled":true}}
-                        if (value.startsWith("{") && value.endsWith("}")) {
+                        if (value.startsWith("{") && value.endsWith("}") || value.startsWith("[") && value.endsWith("]")) {
                             val prefix = "$key="
                             fuzzJsonBody(prefix, request, api)
                         }else {
@@ -188,6 +188,8 @@ class Utils {
         }
 
         // Fuzz JSON请求体
+        // TODO
+        // _rand_csbit=0.34244364937288674&tap=[{"name":"mgmt","nicName":"eth0","nic1Name":null,"ip":"172.16.0.200","mask":"255.255.255.0","gate":null},{"name":"tap1","nicName":"eth1","nic1Name":null,"ip":"","mask":"","gate":null}]&fire=[{"name":"fire1","nicName":"eth2","nic1Name":"eth3","ip":"","mask":"","gate":null}]失败
         suspend fun fuzzJsonBody(prefix: String = "", request: InterceptedRequest, api: MontoyaApi) {
             coroutineScope {
                 try {
