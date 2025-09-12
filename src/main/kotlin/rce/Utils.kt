@@ -21,8 +21,8 @@ class Utils {
     companion object FuzzUtils {
         // 创建Payload实例以访问payload数据
         private val fuzz = Payload()
-        // 控制并发线程数为50
-        private val fuzzingDispatcher = Executors.newFixedThreadPool(50).asCoroutineDispatcher()
+        // 控制并发线程数为5
+        private val fuzzingDispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
 
         // Fuzz查询参数
         suspend fun fuzzQueryParameters(request: InterceptedRequest, api: MontoyaApi) {
@@ -99,6 +99,7 @@ class Utils {
                                     val httpRequestResponse = sendRequestAsync(api, request.withBody(newBody))
                                     if (httpRequestResponse.response().bodyToString()?.contains("uid=") == true) {
                                         api.organizer().sendToOrganizer(httpRequestResponse)
+                                        throw CancellationException("发现Echo类型漏洞，取消后续任务")
                                     }
                                 }
                             }
@@ -118,6 +119,7 @@ class Utils {
                                     delay(2000)
                                     if (collaboratorClient.getAllInteractions().isNotEmpty()) {
                                         api.organizer().sendToOrganizer(httpRequestResponse)
+                                        throw CancellationException("发现OOB类型漏洞，取消后续任务")
                                     }
                                 }
                             }
@@ -188,8 +190,6 @@ class Utils {
         }
 
         // Fuzz JSON请求体
-        // TODO
-        // _rand_csbit=0.34244364937288674&tap=[{"name":"mgmt","nicName":"eth0","nic1Name":null,"ip":"172.16.0.200","mask":"255.255.255.0","gate":null},{"name":"tap1","nicName":"eth1","nic1Name":null,"ip":"","mask":"","gate":null}]&fire=[{"name":"fire1","nicName":"eth2","nic1Name":"eth3","ip":"","mask":"","gate":null}]失败
         suspend fun fuzzJsonBody(prefix: String = "", request: InterceptedRequest, api: MontoyaApi) {
             coroutineScope {
                 try {

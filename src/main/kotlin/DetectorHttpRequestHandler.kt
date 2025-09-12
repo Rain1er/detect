@@ -46,6 +46,7 @@ class DetectorHttpRequestHandler(private val api: MontoyaApi) : ProxyRequestHand
                         Utils.fuzzFormBody(interceptedRequest, api)
                     }
                 }
+
                 contentType == ContentType.JSON -> {
                     GlobalScope.launch {
                         delay(5000)
