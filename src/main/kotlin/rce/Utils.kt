@@ -27,6 +27,7 @@ class Utils {
         // Fuzz查询参数
         suspend fun fuzzQueryParameters(request: InterceptedRequest, api: MontoyaApi) {
             coroutineScope {
+                val scope = this
                 val parameters = request.parameters()
                 parameters.forEach { param ->
                     if (param.type() == HttpParameterType.URL) {
@@ -41,6 +42,7 @@ class Utils {
                                 val responseBody = httpRequestResponse.response().bodyToString()
                                 if (responseBody?.contains("uid=") == true) {
                                     api.organizer().sendToOrganizer(httpRequestResponse)
+                                    scope.cancel(CancellationException("发现Echo类型，取消后续任务"))
                                 }
                             }
                         }
@@ -62,6 +64,8 @@ class Utils {
                                 val interactions = collaboratorClient.getAllInteractions()
                                 if (interactions.isNotEmpty()) {
                                     api.organizer().sendToOrganizer(httpRequestResponse)
+                                    scope.cancel(CancellationException("发现OOB类型，取消后续任务"))
+
                                 }
                             }
                         }
@@ -99,7 +103,6 @@ class Utils {
                                     val httpRequestResponse = sendRequestAsync(api, request.withBody(newBody))
                                     if (httpRequestResponse.response().bodyToString()?.contains("uid=") == true) {
                                         api.organizer().sendToOrganizer(httpRequestResponse)
-                                        throw CancellationException("发现Echo类型漏洞，取消后续任务")
                                     }
                                 }
                             }
@@ -119,7 +122,6 @@ class Utils {
                                     delay(2000)
                                     if (collaboratorClient.getAllInteractions().isNotEmpty()) {
                                         api.organizer().sendToOrganizer(httpRequestResponse)
-                                        throw CancellationException("发现OOB类型漏洞，取消后续任务")
                                     }
                                 }
                             }
