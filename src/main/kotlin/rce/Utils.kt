@@ -82,11 +82,12 @@ class Utils {
         // Fuzz表单请求体
         suspend fun fuzzFormBody(request: InterceptedRequest, api: MontoyaApi) {
             coroutineScope {
+                val scope = this
                 try {
                     val bodyString = request.bodyToString()
                     val params = parseFormData(bodyString)
                     params.forEach { (key, value) ->
-                        // 支持特殊格式的表单数据，key={JSON对象}
+                        // 支持特殊格式的表单数据，key={JSON对象}，或者key=[数组]
                         // parameter={"License":{"consumer":"1","address":"1","zipCode":"1","contactor":"1","telphone":";sleep 5;","email":"1@qq.com","enabled":true}}
                         if (value.startsWith("{") && value.endsWith("}") || value.startsWith("[") && value.endsWith("]")) {
                             val prefix = "$key="
@@ -103,6 +104,8 @@ class Utils {
                                     val httpRequestResponse = sendRequestAsync(api, request.withBody(newBody))
                                     if (httpRequestResponse.response().bodyToString()?.contains("uid=") == true) {
                                         api.organizer().sendToOrganizer(httpRequestResponse)
+                                        scope.cancel(CancellationException("发现Echo类型，取消后续任务"))
+
                                     }
                                 }
                             }
@@ -122,6 +125,8 @@ class Utils {
                                     delay(2000)
                                     if (collaboratorClient.getAllInteractions().isNotEmpty()) {
                                         api.organizer().sendToOrganizer(httpRequestResponse)
+                                        scope.cancel(CancellationException("发现OOB类型，取消后续任务"))
+
                                     }
                                 }
                             }
@@ -194,6 +199,7 @@ class Utils {
         // Fuzz JSON请求体
         suspend fun fuzzJsonBody(prefix: String = "", request: InterceptedRequest, api: MontoyaApi) {
             coroutineScope {
+                val scope = this
                 try {
                     val mapper = ObjectMapper()
                     val body = URLDecoder.decode(request.bodyToString().replace("$prefix", ""), "UTF-8")
@@ -211,6 +217,7 @@ class Utils {
                                 val httpRequestResponse = sendRequestAsync(api, updatedRequest)
                                 if (httpRequestResponse.response().bodyToString()?.contains("uid=") == true) {
                                     api.organizer().sendToOrganizer(httpRequestResponse)
+                                    scope.cancel(CancellationException("发现Echo类型，取消后续任务"))
                                 }
                             }
                         }
@@ -225,6 +232,8 @@ class Utils {
                                 delay(2000)
                                 if (collaboratorClient.getAllInteractions().isNotEmpty()) {
                                     api.organizer().sendToOrganizer(httpRequestResponse)
+                                    scope.cancel(CancellationException("发现OOB类型，取消后续任务"))
+
                                 }
                             }
                         }
@@ -480,7 +489,7 @@ class Utils {
                             val nestedObjectNode = fieldValue as ObjectNode
                             nestedObjectNode.fieldNames().asSequence().forEach { nestedFieldName ->
                                 val nestedFieldValue = nestedObjectNode.get(nestedFieldName)
-                                
+
                                 when {
                                     nestedFieldValue.isTextual -> {
                                         time_2.forEach { payload ->
@@ -532,14 +541,14 @@ class Utils {
                                             }
                                         }
                                     }
-                                    
+
                                     nestedFieldValue.isObject -> {
                                         // 递归处理更深层嵌套对象
-                                        launch(fuzzingDispatcher) { 
-                                            sleepInjectJson(prefix, nestedFieldValue as ObjectNode, mapper, api, request, time_2, time_3) 
+                                        launch(fuzzingDispatcher) {
+                                            sleepInjectJson(prefix, nestedFieldValue as ObjectNode, mapper, api, request, time_2, time_3)
                                         }
                                     }
-                                    
+
                                     nestedFieldValue.isArray -> {
                                         // 处理嵌套对象中的数组
                                         val nestedArrayNode = nestedFieldValue
@@ -594,11 +603,11 @@ class Utils {
                                                         }
                                                     }
                                                 }
-                                                
+
                                                 arrayElement.isObject -> {
                                                     // 递归处理数组中的对象
-                                                    launch(fuzzingDispatcher) { 
-                                                        sleepInjectJson(prefix, arrayElement as ObjectNode, mapper, api, request, time_2, time_3) 
+                                                    launch(fuzzingDispatcher) {
+                                                        sleepInjectJson(prefix, arrayElement as ObjectNode, mapper, api, request, time_2, time_3)
                                                     }
                                                 }
                                             }
@@ -663,8 +672,8 @@ class Utils {
 
                                     arrayElement.isObject -> {
                                         // 递归处理数组中的对象
-                                        launch(fuzzingDispatcher) { 
-                                            sleepInjectJson(prefix, arrayElement as ObjectNode, mapper, api, request, time_2, time_3) 
+                                        launch(fuzzingDispatcher) {
+                                            sleepInjectJson(prefix, arrayElement as ObjectNode, mapper, api, request, time_2, time_3)
                                         }
                                     }
                                 }
